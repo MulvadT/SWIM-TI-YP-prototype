@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
-psql -v ON_ERROR_STOP=1 <<-EOSQL
+psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 <<-EOSQL
   ALTER SYSTEM SET password_encryption = 'scram-sha-256';
   SELECT pg_reload_conf();
 EOSQL
 
 DB_PASS_ESCAPED="\$\$${DB_PASS}\$\$"
 
-psql -v ON_ERROR_STOP=1 <<-EOSQL
+psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 <<-EOSQL
 
 	CREATE USER $DB_USER LOGIN PASSWORD $DB_PASS_ESCAPED;
 

@@ -1,13 +1,30 @@
-FROM continuumio/miniconda3:latest
+FROM continuumio/miniconda3:4.9.2
 
 LABEL maintainer="SWIM EUROCONTROL <http://www.eurocontrol.int>"
 
-RUN apt-get update -y && apt-get upgrade -y && apt-get install -y \
-    build-essential vim tree netcat pkg-config openssl libssl-dev \
-    libsasl2-2 libsasl2-dev libsasl2-modules libffi-dev python-gevent gunicorn
+# Configure apt to accept repository suite name changes and use snapshot mirrors
+RUN echo 'APT::Get::AllowReleaseInfoChange "true";' > /etc/apt/apt.conf.d/10-allow-release-change && \
+    echo 'Acquire::Check-Valid-Until "false";' >> /etc/apt/apt.conf.d/10-allow-release-change && \
+    echo "deb http://snapshot.debian.org/archive/debian/20220801/ buster main" > /etc/apt/sources.list && \
+    echo "deb http://snapshot.debian.org/archive/debian-security/20220801/ buster/updates main" >> /etc/apt/sources.list
 
-RUN conda update -n base -c defaults conda
+# Update and install packages
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    vim \
+    tree \
+    netcat \
+    pkg-config \
+    openssl \
+    libssl-dev \
+    libsasl2-2 \
+    libsasl2-dev \
+    libsasl2-modules \
+    libffi-dev \
+    gunicorn && \
+    (apt-get install -y --no-install-recommends python-gevent || true)
 
+# Copy the environment update script
 COPY env_update.sh /usr/bin/env_update
-
 RUN chmod +x /usr/bin/env_update

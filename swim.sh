@@ -155,9 +155,9 @@ build() {
   cd "${ROOT_DIR}" || exit 1
   echo ""
 
-  echo "Removing obsolete docker images..."
-  echo -e "==================================\n"
-  docker images | grep none | awk '{print $3}' | xargs -r docker rmi
+  # echo "Removing obsolete docker images..."
+  # echo -e "==================================\n"
+  # docker images | grep none | awk '{print $3}' | xargs -r docker rmi
 }
 
 status() {

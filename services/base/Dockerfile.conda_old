@@ -1,0 +1,36 @@
+##FROM continuumio/miniconda3:latest
+#FROM continuumio/miniconda3:4.8.2
+
+#LABEL maintainer="SWIM EUROCONTROL <http://www.eurocontrol.int>"
+
+#RUN apt-get update -y && apt-get upgrade -y && apt-get install -y \
+#    build-essential vim tree netcat pkg-config openssl libssl-dev \
+#    libsasl2-2 libsasl2-dev libsasl2-modules libffi-dev python-gevent gunicorn
+
+#RUN conda update -n base -c defaults conda
+
+#COPY env_update.sh /usr/bin/env_update
+
+# RUN chmod +x /usr/bin/env_update
+FROM continuumio/miniconda3:4.8.2
+
+LABEL maintainer="SWIM EUROCONTROL <http://www.eurocontrol.int>"
+
+# Fix repository issues for Debian Stretch
+RUN echo "deb http://archive.debian.org/debian stretch main" > /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian-security stretch/updates main" >> /etc/apt/sources.list && \
+    echo "Acquire::Check-Valid-Until \"false\";" > /etc/apt/apt.conf.d/10no-check-valid-until
+
+# Remove PostgreSQL repository which no longer exists
+RUN rm -f /etc/apt/sources.list.d/pgdg.list || true
+
+# Now update and install packages
+RUN apt-get clean && \
+    apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+    build-essential vim tree netcat pkg-config openssl libssl-dev \
+    libsasl2-2 libsasl2-dev libsasl2-modules libffi-dev python-gevent gunicorn
+
+RUN conda update -n base -c defaults conda
+COPY env_update.sh /usr/bin/env_update
+RUN chmod +x /usr/bin/env_update

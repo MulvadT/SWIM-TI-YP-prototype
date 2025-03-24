@@ -1,4 +1,6 @@
-FROM rabbitmq:3-management
+# FROM rabbitmq:3-management
+FROM rabbitmq:3.7-management
+
 
 RUN apt-get update --fix-missing && apt-get install -y curl && apt-get install -y python3.7
 

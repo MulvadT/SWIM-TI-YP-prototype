@@ -9,3 +9,4 @@ python /app/provision/provision_db.py
 echo "Waiting for Broker..."
 
 python /app/provision/provision_broker.py
+
