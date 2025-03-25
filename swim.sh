@@ -46,6 +46,10 @@ user_config() {
   ENV_FILE="${ROOT_DIR}/swim.env"
 
   touch "${ENV_FILE}"
+  echo "Made env FILE" 
+  echo "${ENV_FILE}"
+  
+  ls
 
   python "${SWIM_USER_CONFIG_DIR_SRC}/swim_user_config/main.py" -c "${SWIM_USER_CONFIG_DIR}/config.json" -o "${ENV_FILE}" ${P}
 
@@ -55,8 +59,9 @@ user_config() {
   fi
 
   while read -r LINE; do export "${LINE}"; done < "${ENV_FILE}"
+  while read -r LINE; do echo "export ${LINE}"; done < "${ENV_FILE}"
 
-  rm "${ENV_FILE}"
+  #rm "${ENV_FILE}"
 }
 
 
@@ -70,7 +75,7 @@ prepare_repos() {
     cd "${SUBSCRIPTION_MANAGER_DIR_SRC}" || exit
     git pull -q --rebase origin master
   else
-    git clone -q https://github.com/eurocontrol-swim/subscription-manager.git "${SUBSCRIPTION_MANAGER_DIR_SRC}"
+    git clone -q https://github.com/MulvadT/subscription-manager.git "${SUBSCRIPTION_MANAGER_DIR_SRC}"
   fi
   echo "OK"
 
@@ -80,7 +85,7 @@ prepare_repos() {
     cd "${SWIM_ADSB_DIR_SRC}" || exit
     git pull -q --rebase origin master
   else
-    git clone -q https://github.com/eurocontrol-swim/swim-adsb.git "${SWIM_ADSB_DIR_SRC}"
+    git clone -q https://github.com/MulvadT/swim-adsb.git "${SWIM_ADSB_DIR_SRC}"
   fi
   echo "OK"
 
@@ -90,7 +95,7 @@ prepare_repos() {
     cd "${SWIM_EXPLORER_DIR_SRC}" || exit
     git pull -q --rebase origin master
   else
-    git clone -q https://github.com/eurocontrol-swim/swim-explorer.git "${SWIM_EXPLORER_DIR_SRC}"
+    git clone -q https://github.com/MulvadT/swim-explorer.git "${SWIM_EXPLORER_DIR_SRC}"
   fi
   echo "OK"
 
