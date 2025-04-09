@@ -130,6 +130,25 @@ stop_services_with_purge() {
   echo ""
 }
 
+reset_docker_images() {
+  echo "Resetting Docker environment..."
+  echo -e "=========================\n"
+  
+  # Stop all containers via docker-compose
+  docker-compose down
+  
+  # Remove all containers with SWIM prefix and the postgres container
+  echo "Removing SWIM containers and postgres..."
+  docker ps -a | grep -E 'SWIM|postgres' | awk '{print $1}' | xargs -r docker rm 
+  
+  # Remove all volumes associated with the project
+  echo "Removing associated volumes..."
+  docker volume ls -q | grep swim-ti-yp-prototype | xargs -r docker volume rm
+  
+  echo -e "\nReset complete. You can now rebuild and start your services fresh."
+}
+
+
 
 stop_services() {
   echo "Stopping SWIM..."
@@ -219,6 +238,9 @@ case ${ACTION} in
     ;;
   provision)
     data_provision
+    ;;
+  resetAll)
+    reset_docker_images
     ;;
   status)
     status
