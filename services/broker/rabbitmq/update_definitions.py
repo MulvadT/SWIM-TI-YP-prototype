@@ -35,7 +35,6 @@ import sys
 
 __author__ = "EUROCONTROL (SWIM)"
 
-
 def _get_salt() -> str:
     """
     Generates a 32bit random salt, i.e. e7663f87
@@ -43,64 +42,77 @@ def _get_salt() -> str:
     """
     return os.urandom(4).hex()
 
-
 def hash_rabbitmq_password(password: str, salt: str) -> str:
     """
     Hashes (sha256) the provided password according to the RabbitMQ algorithm
-
     :param salt: a 32bit string in hex, i.e. e7663f87
     :param password: any string
     :return: the hashed password
     """
     salt_and_password = salt + password.encode('utf-8').hex()
-
     salt_and_password_bytes = bytearray.fromhex(salt_and_password)
-
     salted_sha256 = hashlib.sha256(salt_and_password_bytes).hexdigest()
-
     password_hash = bytearray.fromhex(salt + salted_sha256)
-
     result = binascii.b2a_base64(password_hash).strip().decode('utf-8')
-
     return result
 
+def add_user_to_definitions(data_json, username, password, tags="", configure=".*", write=".*", read=".*"):
+    """
+    Add a user to the RabbitMQ definitions JSON
+    """
+    # Add user
+    data_json['users'].append({
+        "name": username,
+        "password_hash": hash_rabbitmq_password(salt=_get_salt(), password=password),
+        "hashing_algorithm": "rabbit_password_hashing_sha256",
+        "tags": tags
+    })
+    
+    # Add permissions
+    data_json['permissions'].append({
+        "user": username,
+        "vhost": "/",
+        "configure": configure,
+        "write": write,
+        "read": read
+    })
 
 if __name__ == '__main__':
     """
-    Creates the admin user provided b the user and inserts it into the definitions file
+    Creates the admin user and management user provided by the user and inserts them into the definitions file
     """
-
-    if len(sys.argv) != 4:
-        print('Usage: update_definitions.py <rabbitmq_definitions_path> <broker_admin_user> <broker_admin_pass>')
+    if len(sys.argv) != 6:
+        print('Usage: update_definitions.py <rabbitmq_definitions_path> <broker_admin_user> <broker_admin_pass> <broker_mgmt_user> <broker_mgmt_pass>')
         exit(1)
-
-    _, definitions_path, broker_admin_user, broker_admin_pass = sys.argv
-
+    
+    _, definitions_path, broker_admin_user, broker_admin_pass, broker_mgmt_user, broker_mgmt_pass = sys.argv
+    
     if not os.path.exists(definitions_path):
         print(f'{definitions_path} does not exist.')
         exit(1)
-
+    
     with open(definitions_path, 'r') as f:
         data_json = json.loads(f.read())
-
-    data_json['users'].append(
-        {
-            "name": broker_admin_user,
-            "password_hash": hash_rabbitmq_password(salt=_get_salt(), password=broker_admin_pass),
-            "hashing_algorithm": "rabbit_password_hashing_sha256",
-            "tags": "administrator"
-        }
+    
+    # Add admin user with administrator privileges
+    add_user_to_definitions(
+        data_json, 
+        broker_admin_user, 
+        broker_admin_pass, 
+        tags="administrator"
     )
-
-    data_json['permissions'].append(
-        {
-            "user": broker_admin_user,
-            "vhost": "/",
-            "configure": ".*",
-            "write": ".*",
-            "read": ".*"
-        }
+    
+    # Add management user with management privileges
+    add_user_to_definitions(
+        data_json, 
+        broker_mgmt_user, 
+        broker_mgmt_pass, 
+        tags="management"
     )
-
+    
     with open(definitions_path, 'w') as f:
-        f.write(json.dumps(data_json))
+        f.write(json.dumps(data_json, indent=2))
+    
+    print(f"Successfully added users: {broker_admin_user} (administrator), {broker_mgmt_user} (management)")
+
+

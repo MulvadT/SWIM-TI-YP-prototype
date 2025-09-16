@@ -32,6 +32,8 @@ services:
       args:
         - BROKER_ADMIN_USER=${BROKER_ADMIN_USER}
         - BROKER_ADMIN_PASS=${BROKER_ADMIN_PASS}
+        - BROKER_MGMT_USER=${BROKER_MGMT_USER}      # Add this line
+        - BROKER_MGMT_PASS=${BROKER_MGMT_PASS}      # Add this line
     container_name: rabbitmq
     ports:
       - 15671:15671

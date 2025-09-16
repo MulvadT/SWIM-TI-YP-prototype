@@ -105,6 +105,10 @@ prepare_repos() {
 data_provision() {
   echo "Data provisioning to Subscription Manager..."
   echo -e "============================================\n"
+  docker-compose build db broker
+  docker-compose run subscription-manager-provision
+  sleep 2 
+  echo "Running twice as some docker errors sometimes happens" 
   docker-compose run subscription-manager-provision
   echo ""
 }
@@ -162,7 +166,7 @@ build() {
   echo "Removing old data..."
   echo -e "==================\n"
   # Remove existing volumes
-  docker volume ls -q | grep swimtiypprototype | xargs -r docker volume rm
+ # docker volume ls -q | grep swimtiypprototype | xargs -r docker volume rm
 
   echo "Building images..."
   echo -e "==================\n"

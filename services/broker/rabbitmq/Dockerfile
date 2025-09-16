@@ -1,29 +1,25 @@
-# FROM rabbitmq:3-management
 FROM rabbitmq:3.7-management
-
-
 RUN apt-get update --fix-missing && apt-get install -y curl && apt-get install -y python3.7
-
 RUN rabbitmq-plugins enable --offline rabbitmq_amqp1_0 rabbitmq_auth_mechanism_ssl
 
-# certicates and keys
+# certificates and keys
 COPY ./secrets/rabbitmq/ca_certificate.pem /certs/ca_certificate.pem
-
 COPY ./secrets/rabbitmq/server/server_certificate.pem /certs/server_certificate.pem
-
 COPY ./secrets/rabbitmq/server/server_key.pem /certs/server_key.pem
 
 # definitions
 COPY ./secrets/rabbitmq/rabbitmq_definitions.json /etc/rabbitmq/rabbitmq_definitions.json
-
 COPY ./services/broker/rabbitmq/update_definitions.py /etc/rabbitmq/update_definitions.py
-
 RUN chmod +x /etc/rabbitmq/update_definitions.py
 
+# Accept both admin and management user credentials
 ARG BROKER_ADMIN_USER
 ARG BROKER_ADMIN_PASS
+ARG BROKER_MGMT_USER
+ARG BROKER_MGMT_PASS
 
-RUN python3 /etc/rabbitmq/update_definitions.py /etc/rabbitmq/rabbitmq_definitions.json "${BROKER_ADMIN_USER}" "${BROKER_ADMIN_PASS}"
+# Update the script call to include both users
+RUN python3 /etc/rabbitmq/update_definitions.py /etc/rabbitmq/rabbitmq_definitions.json "${BROKER_ADMIN_USER}" "${BROKER_ADMIN_PASS}" "${BROKER_MGMT_USER}" "${BROKER_MGMT_PASS}"
 
 # conf file
 COPY ./services/broker/rabbitmq/rabbitmq.conf /etc/rabbitmq/rabbitmq.conf
