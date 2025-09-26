@@ -121,6 +121,8 @@ services:
     environment:
       - SWIM_ADSB_SM_USER=${SWIM_ADSB_SM_USER}
       - SWIM_ADSB_SM_PASS=${SWIM_ADSB_SM_PASS}
+      - OPENSKY_CLIENT_ID=${OPENSKY_CLIENT_ID}
+      - OPENSKY_CLIENT_SECRET=${OPENSKY_CLIENT_SECRET}
     volumes:
       - ./secrets/rabbitmq/client/:/secrets/broker/client
       - ./secrets/rabbitmq/ca_certificate.pem:/secrets/broker/ca_certificate.pem
