@@ -1,6 +1,8 @@
 #!/bin/bash
 
-ROOT_DIR=${PWD}
+# Resolve to the directory of this script to make path handling robust,
+# regardless of the current working directory when invoking the script.
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
 SERVICES_DIR=${ROOT_DIR}'/services'
 UTILS_DIR=${ROOT_DIR}'/utils'
 DOS2UNIX="${UTILS_DIR}/dos2unix.exe"
@@ -14,9 +16,27 @@ SWIM_EXPLORER_DIR_SRC=${SWIM_EXPLORER_DIR}"/src"
 SWIM_USER_CONFIG_DIR=${SERVICES_DIR}"/swim_user_config"
 SWIM_USER_CONFIG_DIR_SRC=${SWIM_USER_CONFIG_DIR}"/src"
 
+# Wrapper to support both "docker compose" (new) and "docker-compose" (legacy)
+dc() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+  else
+    docker-compose "$@"
+  fi
+}
+
+# Derive the Compose project name similar to docker-compose defaults.
+project_name() {
+  if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then
+    printf "%s" "${COMPOSE_PROJECT_NAME}"
+  else
+    # Default: lowercased directory name with spaces to hyphens
+    basename "${ROOT_DIR}" | tr '[:upper:]' '[:lower:]' | tr ' ' '-'
+  fi
+}
+
 is_windows() {
   UNAME=$(uname)
-
   [[ "${UNAME}" != "Linux" ]] && [[ "${UNAME}" != "Darwin" ]]
 }
 
@@ -44,26 +64,42 @@ user_config() {
   echo -e "=========================="
 
   ENV_FILE="${ROOT_DIR}/swim.env"
-
   touch "${ENV_FILE}"
-  echo "Made env FILE" 
-  echo "${ENV_FILE}"
-  
-  ls
 
   python "${SWIM_USER_CONFIG_DIR_SRC}/swim_user_config/main.py" -c "${SWIM_USER_CONFIG_DIR}/config.json" -o "${ENV_FILE}" ${P}
 
   if is_windows
   then
-    "${DOS2UNIX}" -q "${ENV_FILE}"
+    # If dos2unix.exe is not present, attempt to use system 'dos2unix' if available.
+    if [[ -x "${DOS2UNIX}" ]]; then
+      "${DOS2UNIX}" -q "${ENV_FILE}"
+    elif command -v dos2unix >/dev/null 2>&1; then
+      dos2unix -q "${ENV_FILE}"
+    else
+      # Fallback: strip CR characters with sed
+      sed -i 's/\r$//' "${ENV_FILE}"
+    fi
   fi
 
-  while read -r LINE; do export "${LINE}"; done < "${ENV_FILE}"
-  while read -r LINE; do echo "export ${LINE}"; done < "${ENV_FILE}"
+  # Export only valid KEY=VALUE lines, ignore empty lines and comments
+  while IFS= read -r LINE; do
+    case "${LINE}" in
+      ''|'#'*) continue;;
+      *=*) export "${LINE}";;
+    esac
+  done < "${ENV_FILE}"
 
-  #rm "${ENV_FILE}"
+  # Echo what was exported (useful for CI/debug); ignore comments/empty lines
+  while IFS= read -r LINE; do
+    case "${LINE}" in
+      ''|'#'*) continue;;
+      *=*) echo "export ${LINE}";;
+    esac
+  done < "${ENV_FILE}"
+
+  # Keep env file for reuse; uncomment to clean up automatically:
+  # rm "${ENV_FILE}"
 }
-
 
 prepare_repos() {
   echo "Preparing Git repositories..."
@@ -75,7 +111,7 @@ prepare_repos() {
     cd "${SUBSCRIPTION_MANAGER_DIR_SRC}" || exit
     git pull -q --rebase origin master
   else
-    git clone -q https://github.com/MulvadT/subscription-manager.git "${SUBSCRIPTION_MANAGER_DIR_SRC}"
+    git clone -q --depth 1 https://github.com/MulvadT/subscription-manager.git "${SUBSCRIPTION_MANAGER_DIR_SRC}"
   fi
   echo "OK"
 
@@ -85,7 +121,7 @@ prepare_repos() {
     cd "${SWIM_ADSB_DIR_SRC}" || exit
     git pull -q --rebase origin master
   else
-    git clone -q https://github.com/MulvadT/swim-adsb.git "${SWIM_ADSB_DIR_SRC}"
+    git clone -q --depth 1 https://github.com/MulvadT/swim-adsb.git "${SWIM_ADSB_DIR_SRC}"
   fi
   echo "OK"
 
@@ -95,101 +131,113 @@ prepare_repos() {
     cd "${SWIM_EXPLORER_DIR_SRC}" || exit
     git pull -q --rebase origin master
   else
-    git clone -q https://github.com/MulvadT/swim-explorer.git "${SWIM_EXPLORER_DIR_SRC}"
+    git clone -q --depth 1 https://github.com/MulvadT/swim-explorer.git "${SWIM_EXPLORER_DIR_SRC}"
   fi
   echo "OK"
 
   echo -e "\n\n"
+  cd "${ROOT_DIR}" || exit
 }
 
 data_provision() {
   echo "Data provisioning to Subscription Manager..."
   echo -e "============================================\n"
-  docker-compose build db broker
-  docker-compose run subscription-manager-provision
-  sleep 2 
-  echo "Running twice as some docker errors sometimes happens" 
-  docker-compose run subscription-manager-provision
+
+  dc build db broker
+
+  # Run the provisioner twice by design, with retry logic.
+  # First run may fail transiently; don't abort on first failure.
+  if ! dc run --rm subscription-manager-provision; then
+    echo "First provision run failed, retrying after short delay..."
+    sleep 2
+  fi
+  dc run --rm subscription-manager-provision
   echo ""
 }
 
 start_services() {
   echo "Starting up SWIM..."
   echo -e "===================\n"
-  docker-compose up -d web-server subscription-manager swim-adsb swim-explorer
+  dc up -d web-server subscription-manager swim-adsb swim-explorer
   echo ""
 }
 
 stop_services_with_clean() {
-  echo "Stopping SWIM..."
-  echo -e "================\n"
-  docker-compose down
+  echo "Stopping SWIM and removing containers..."
+  echo -e "========================================\n"
+  dc down
   echo ""
 }
 
 stop_services_with_purge() {
-  stop_services_with_clean &&
-  docker volume ls -q | grep swim-ti_yp_prototype | xargs -r docker volume rm
+  echo "Stopping SWIM and removing containers and volumes..."
+  echo -e "====================================================\n"
+
+  # Preferred: let compose purge volumes it created
+  dc down -v
+
+  # Additional safety: if anything lingers, remove project-scoped volumes by name/label
+  PNAME="$(project_name)"
+  # Try by label (Compose v2)
+  docker volume ls -q --filter "label=com.docker.compose.project=${PNAME}" | xargs -r docker volume rm
+  # Fallback by name prefix
+  docker volume ls -q | grep -E "^${PNAME}_" | xargs -r docker volume rm
 
   echo ""
 }
 
 reset_docker_images() {
   echo "Resetting Docker environment..."
-  echo -e "=========================\n"
-  
-  # Stop all containers via docker-compose
-  docker-compose down
-  
-  # Remove all containers with SWIM prefix and the postgres container
-  echo "Removing SWIM containers and postgres..."
-  docker ps -a | grep -E 'SWIM|postgres' | awk '{print $1}' | xargs -r docker rm 
-  
+  echo -e "===============================\n"
+
+  # Stop containers via compose
+  dc down
+
+  # Remove all containers created by this compose project (safe, precise)
+  PNAME="$(project_name)"
+  echo "Removing containers for project: ${PNAME}..."
+  docker ps -a -q --filter "label=com.docker.compose.project=${PNAME}" | xargs -r docker rm -f
+
   # Remove all volumes associated with the project
   echo "Removing associated volumes..."
-  docker volume ls -q | grep swim-ti-yp-prototype | xargs -r docker volume rm
-  
+  docker volume ls -q --filter "label=com.docker.compose.project=${PNAME}" | xargs -r docker volume rm
+  # Fallback by name prefix
+  docker volume ls -q | grep -E "^${PNAME}_" | xargs -r docker volume rm
+
   echo -e "\nReset complete. You can now rebuild and start your services fresh."
 }
-
-
 
 stop_services() {
   echo "Stopping SWIM..."
   echo -e "================\n"
-  docker-compose stop
+  dc stop
   echo ""
 }
 
 build() {
-
-  echo "Removing old data..."
-  echo -e "==================\n"
-  # Remove existing volumes
- # docker volume ls -q | grep swimtiypprototype | xargs -r docker volume rm
-
   echo "Building images..."
   echo -e "==================\n"
+
   # build the base images upon which the swim services will depend on
   cd "${BASE_DIR}" || exit 1
 
   docker build --no-cache --force-rm -t swim-base -f Dockerfile .
-
   docker build --no-cache --force-rm -t swim-base.conda -f Dockerfile.conda .
 
-  # Build the rest of the images
-  docker-compose build --force-rm
-
+  # Build the rest of the images via compose
   cd "${ROOT_DIR}" || exit 1
-  echo ""
+  dc build --force-rm
 
-  # echo "Removing obsolete docker images..."
-  # echo -e "==================================\n"
-  # docker images | grep none | awk '{print $3}' | xargs -r docker rmi
+  echo ""
 }
 
 status() {
-  docker ps
+  # Show project services if compose is available; else fall back to all containers
+  if docker compose version >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1; then
+    dc ps
+  else
+    docker ps
+  fi
 }
 
 usage() {
@@ -203,6 +251,7 @@ usage() {
   echo "    stop                    Stops all the services"
   echo "    stop --clean            Stops all the services and cleans up the containers"
   echo "    stop --purge            Stops all the services and cleans up the containers and the volumes"
+  echo "    resetAll                Stops services and removes containers and volumes tied to this project"
   echo "    status                  Displays the status of the running containers"
   echo ""
 }
@@ -211,7 +260,7 @@ ACTION=${1}
 
 case ${ACTION} in
   build)
-    # update the repos if they exits othewise clone them
+    # update the repos if they exist otherwise clone them
     prepare_repos
     # build the images
     build

@@ -2,7 +2,6 @@ version: "3.5"
 
 # TODO: pull images from docker hub
 
-
 services:
   db:
     image: swim-postgres
@@ -22,6 +21,7 @@ services:
     command: postgres -c config_file=/etc/postgresql.conf
     networks:
       - backend
+    restart: unless-stopped
 
   broker:
     image: rabbitmq_amqp10
@@ -42,6 +42,7 @@ services:
       - broker-data:/var/lib/rabbitmq
     networks:
       - backend
+    restart: unless-stopped
 
   web-server:
     image: swim-nginx
@@ -58,6 +59,7 @@ services:
       - subscription-manager
     networks:
       - backend
+    restart: unless-stopped
 
   subscription-manager:
     image: subscription-manager
@@ -79,6 +81,7 @@ services:
     command: bash /app/entry.sh
     networks:
       - backend
+    restart: unless-stopped
 
   subscription-manager-provision:
     image: subscription-manager
@@ -110,6 +113,7 @@ services:
     command: bash entry.sh
     networks:
       - backend
+    # No restart policy here, this is a one-off run service used via `compose run`
 
   swim-adsb:
     image: swim-adsb
@@ -132,7 +136,7 @@ services:
     command: bash /app/entry.sh
     networks:
       - backend
-
+    restart: unless-stopped
 
   swim-explorer:
     image: swim-explorer
@@ -158,7 +162,7 @@ services:
     command: bash /app/entry.sh
     networks:
       - backend
-
+    restart: unless-stopped
 
 networks:
   backend:
@@ -169,5 +173,3 @@ volumes:
     driver: local
   broker-data:
     driver: local
-
-

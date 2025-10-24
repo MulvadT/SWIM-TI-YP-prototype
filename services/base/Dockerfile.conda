@@ -1,30 +1,36 @@
 FROM continuumio/miniconda3:4.9.2
 
-LABEL maintainer="SWIM EUROCONTROL <http://www.eurocontrol.int>"
+LABEL maintainer="SWIM EUROCONTROL <http://www.eurocontrol.int>" \
+      org.opencontainers.image.source="https://github.com/MulvadT/SWIM-TI-YP-prototype" \
+      org.opencontainers.image.title="swim-base.conda" \
+      org.opencontainers.image.description="Base image for SWIM services (Miniconda 4.9.2)"
 
-# Configure apt to accept repository suite name changes and use snapshot mirrors
-RUN echo 'APT::Get::AllowReleaseInfoChange "true";' > /etc/apt/apt.conf.d/10-allow-release-change && \
-    echo 'Acquire::Check-Valid-Until "false";' >> /etc/apt/apt.conf.d/10-allow-release-change && \
-    echo "deb http://snapshot.debian.org/archive/debian/20220801/ buster main" > /etc/apt/sources.list && \
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Configure apt for the archived Debian base in this pinned Miniconda image
+RUN set -eux; \
+    echo 'APT::Get::AllowReleaseInfoChange "true";' > /etc/apt/apt.conf.d/10-allow-release-change; \
+    echo 'Acquire::Check-Valid-Until "false";'       >> /etc/apt/apt.conf.d/10-allow-release-change; \
+    echo "deb http://snapshot.debian.org/archive/debian/20220801/ buster main" > /etc/apt/sources.list; \
     echo "deb http://snapshot.debian.org/archive/debian-security/20220801/ buster/updates main" >> /etc/apt/sources.list
 
-# Update and install packages
-RUN apt-get update -y && \
+# Base utilities; prefer no-recommends and cleanup to keep image small
+RUN set -eux; \
+    apt-get update -y; \
     apt-get install -y --no-install-recommends \
-    build-essential \
-    vim \
-    tree \
-    netcat \
-    pkg-config \
-    openssl \
-    libssl-dev \
-    libsasl2-2 \
-    libsasl2-dev \
-    libsasl2-modules \
-    libffi-dev \
-    gunicorn && \
-    (apt-get install -y --no-install-recommends python-gevent || true)
+      build-essential vim tree netcat pkg-config \
+      openssl libssl-dev \
+      libsasl2-2 libsasl2-dev libsasl2-modules \
+      libffi-dev \
+      ca-certificates gettext-base \
+    ; \
+    # Prefer platform packages, but make gevent/gunicorn resilient
+    (apt-get install -y --no-install-recommends gunicorn || pip install --no-cache-dir gunicorn) || true; \
+    (apt-get install -y --no-install-recommends python3-gevent || \
+     apt-get install -y --no-install-recommends python-gevent || \
+     pip install --no-cache-dir gevent) || true; \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy the environment update script
+# Interpolation helper (kept at same path for compatibility)
 COPY env_update.sh /usr/bin/env_update
 RUN chmod +x /usr/bin/env_update
